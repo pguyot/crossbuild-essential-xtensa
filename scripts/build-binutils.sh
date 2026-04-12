@@ -13,12 +13,19 @@ BUILD_DIR="$(pwd)/build/binutils-${VARIANT}"
 
 log_info "Building binutils ${BINUTILS_VERSION} for ${TARGET}"
 
-# Download and extract if not already done
+# Get binutils source from Ubuntu (includes patches for cross-compilation)
 if [ ! -d "binutils-${BINUTILS_VERSION}" ]; then
-    log_info "Downloading binutils ${BINUTILS_VERSION}..."
-    wget -q --show-progress \
-        "https://ftp.gnu.org/gnu/binutils/binutils-${BINUTILS_VERSION}.tar.xz"
-    tar xf "binutils-${BINUTILS_VERSION}.tar.xz"
+    log_info "Getting binutils source from Ubuntu..."
+    apt-get source binutils
+    BINUTILS_SRC_DIR=$(ls -d binutils-*/ 2>/dev/null | head -1 | sed 's:/$::')
+    if [ -z "$BINUTILS_SRC_DIR" ]; then
+        log_error "Failed to extract binutils source"
+        exit 1
+    fi
+    if [ "$BINUTILS_SRC_DIR" != "binutils-${BINUTILS_VERSION}" ]; then
+        log_info "Renaming $BINUTILS_SRC_DIR to binutils-${BINUTILS_VERSION}"
+        mv "$BINUTILS_SRC_DIR" binutils-${BINUTILS_VERSION}
+    fi
 fi
 
 rm -rf "${BUILD_DIR}"
@@ -26,6 +33,7 @@ mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
 log_info "Configuring binutils..."
+unset CC CXX AR RANLIB STRIP CFLAGS CXXFLAGS LDFLAGS
 ../../binutils-${BINUTILS_VERSION}/configure \
     --target="${TARGET}" \
     --prefix="${INSTALL_DIR}" \

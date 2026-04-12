@@ -21,8 +21,8 @@ jobs:
             echo "is_tag=true" >> $GITHUB_OUTPUT
             echo "Building toolchain for GCC version from tag: ${TAG_NAME}"
           else
-            # Default GCC version — matches what ESP-IDF v5.x uses
-            GCC_VERSION="13.2.0"
+            # Default GCC version — Ubuntu 24.04 ships gcc-14 (14.2.0)
+            GCC_VERSION="14.2.0"
             echo "gcc_version=${GCC_VERSION}" >> $GITHUB_OUTPUT
             echo "release_tag=${GCC_VERSION}" >> $GITHUB_OUTPUT
             echo "is_tag=false" >> $GITHUB_OUTPUT
@@ -41,7 +41,6 @@ jobs:
 
     env:
       GCC_VERSION: ${{ needs.get-version.outputs.gcc_version }}
-      BINUTILS_VERSION: "2.42"
       GLIBC_VERSION: "2.39"
       LINUX_VERSION: "6.8"
       TARGET: xtensa-${{ matrix.variant.core }}-linux-gnu
@@ -79,24 +78,9 @@ jobs:
             dpkg-dev devscripts debhelper \
             qemu-user
 
-      - name: Download GCC ${{ env.GCC_VERSION }} and binutils ${{ env.BINUTILS_VERSION }} sources
+      - name: Extract Linux ${{ env.LINUX_VERSION }} kernel source
         run: |
           mkdir -p build
-
-          if [ ! -d "gcc-${GCC_VERSION}" ]; then
-            wget -q --show-progress \
-              "https://ftp.gnu.org/gnu/gcc/gcc-${GCC_VERSION}/gcc-${GCC_VERSION}.tar.xz"
-            tar xf "gcc-${GCC_VERSION}.tar.xz"
-            cd "gcc-${GCC_VERSION}" && ./contrib/download_prerequisites && cd ..
-          fi
-
-          if [ ! -d "binutils-${BINUTILS_VERSION}" ]; then
-            wget -q --show-progress \
-              "https://ftp.gnu.org/gnu/binutils/binutils-${BINUTILS_VERSION}.tar.xz"
-            tar xf "binutils-${BINUTILS_VERSION}.tar.xz"
-          fi
-
-          # Linux kernel headers — use the pre-downloaded tarball if present in the repo
           if [ ! -d "linux-${LINUX_VERSION}" ]; then
             if [ -f "linux-${LINUX_VERSION}.tar.xz" ]; then
               tar xf "linux-${LINUX_VERSION}.tar.xz"
@@ -107,7 +91,7 @@ jobs:
             fi
           fi
 
-      - name: Build binutils ${{ env.BINUTILS_VERSION }} for ${{ env.TARGET }}
+      - name: Build binutils for ${{ env.TARGET }}
         run: bash scripts/build-binutils.sh "${VARIANT}" "${CHIP}"
 
       - name: Add toolchain bin to PATH
@@ -186,7 +170,7 @@ jobs:
            .
            Suitable for cross-compiling AtomVM and running tests under qemu-user-xtensa.
            .
-           GCC: ${GCC_VERSION}  Binutils: ${BINUTILS_VERSION}  glibc: ${GLIBC_VERSION}
+           GCC: ${GCC_VERSION}  Binutils: 2.42  glibc: ${GLIBC_VERSION}
            Core: ${VARIANT}  Chip: ${CHIP}
            Target triple: ${TARGET}
           EOF

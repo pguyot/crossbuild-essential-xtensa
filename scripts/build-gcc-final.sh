@@ -7,7 +7,7 @@ CHIP=$2     # esp32 or esp32s3
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 
-GCC_VERSION=13.2.0
+GCC_VERSION=14.2.0
 INSTALL_DIR="/opt/xtensa-${VARIANT}"
 SYSROOT_DIR="${INSTALL_DIR}/${TARGET}/sysroot"
 BUILD_DIR="$(pwd)/build/gcc-final-${VARIANT}"
@@ -17,7 +17,21 @@ log_info "Building GCC ${GCC_VERSION} final (with sysroot) for ${TARGET}"
 # GCC source should already be present from build-gcc-stage1.sh
 if [ ! -d "gcc-${GCC_VERSION}" ]; then
     log_error "GCC source not found (gcc-${GCC_VERSION}/)."
-    log_error "Run build-gcc-stage1.sh first — it downloads the GCC source."
+    log_error "Run build-gcc-stage1.sh first — it fetches the GCC source."
+    exit 1
+fi
+
+# Detect configure script location (Ubuntu package may nest source differently)
+GCC_CONFIGURE=""
+for possible_dir in "gcc-${GCC_VERSION}/src" "gcc-${GCC_VERSION}"; do
+    if [ -f "${possible_dir}/configure" ]; then
+        GCC_CONFIGURE="$(pwd)/${possible_dir}/configure"
+        break
+    fi
+done
+if [ -z "$GCC_CONFIGURE" ]; then
+    log_error "Could not find GCC configure script"
+    find "gcc-${GCC_VERSION}/" -name configure -type f 2>/dev/null || true
     exit 1
 fi
 
@@ -33,7 +47,8 @@ mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
 log_info "Configuring GCC final..."
-../../gcc-${GCC_VERSION}/configure \
+unset CC CXX AR RANLIB STRIP CFLAGS CXXFLAGS LDFLAGS
+"${GCC_CONFIGURE}" \
     --target="${TARGET}" \
     --prefix="${INSTALL_DIR}" \
     --with-sysroot="${SYSROOT_DIR}" \
