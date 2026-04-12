@@ -1,0 +1,41 @@
+# Build artifacts
+build/
+*.deb
+*.tar.gz
+*.tar.xz
+*.tar.bz2
+
+# Source directories and Debian source packages
+glibc-*/
+glibc_*
+libidn2-*/
+libidn2_*
+zlib-*/
+zlib_*
+mbedtls-*/
+mbedtls_*
+libxcrypt-*/
+libxcrypt_*
+libunistring-*/
+libunistring_*
+linux-*/
+linux_*
+
+# Temporary files
+*.o
+*.a
+*.so
+*.so.*
+*.log
+*.tmp
+*~
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Package metadata
+DEBIAN/

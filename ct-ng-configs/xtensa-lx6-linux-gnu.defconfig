@@ -1,0 +1,59 @@
+# crosstool-NG defconfig for xtensa-lx6-linux-gnu
+#
+# Target: Xtensa LX6 (ESP32 / ESP32-S2) — Linux userspace with glibc
+# Use case: cross-compiling Linux binaries for xtensa that can be run under
+#           qemu-user-xtensa on an x86_64 host (e.g. for AtomVM CI tests).
+#
+# The windowed register ABI (call8) is the default for xtensa-linux-gnu
+# toolchains and matches the ESP-IDF ABI.
+#
+# Apply with:
+#   ./ct-ng defconfig DEFCONFIG=path/to/this/file
+# then:
+#   ./ct-ng build
+#
+# Based on espressif/crosstool-NG.  If CT_ARCH_XTENSA_CUSTOM_NAME is not
+# recognised by your ct-ng version, check config/arch/xtensa.in for the
+# correct key name for the ESP32 ISA overlay.
+
+# ── Paths ──────────────────────────────────────────────────────────────────────
+CT_PREFIX_DIR="/opt/xtensa-lx6"
+CT_REMOVE_DOCS=y
+
+# ── Target architecture ────────────────────────────────────────────────────────
+CT_ARCH_XTENSA=y
+CT_ARCH_ENDIAN="little"
+CT_ARCH_FLOAT="soft"
+CT_ARCH_XTENSA_CUSTOM_NAME="esp32"
+CT_TARGET_VENDOR="lx6"
+
+# ── Kernel (Linux headers for glibc) ──────────────────────────────────────────
+CT_KERNEL="linux"
+CT_LINUX_VERSION="6.1.0"
+
+# ── C Library ─────────────────────────────────────────────────────────────────
+CT_LIBC="glibc"
+CT_LIBC_VERSION="2.39"
+CT_LIBC_GLIBC_EXTRA_CONFIG_ARRAY=""
+CT_LIBC_ENABLE_FORTIFIED_BUILD=n
+
+# ── Binutils ──────────────────────────────────────────────────────────────────
+CT_BINUTILS_VERSION="2.42"
+
+# ── GCC ───────────────────────────────────────────────────────────────────────
+CT_GCC_VERSION="13.2.0"
+CT_CC_LANG_CXX=y
+CT_CC_LANG_FORTRAN=n
+CT_CC_LANG_ADA=n
+CT_CC_LANG_OBJC=n
+CT_CC_LANG_OBJCXX=n
+
+# ── Build options ─────────────────────────────────────────────────────────────
+CT_MULTILIB=n
+CT_DEBUG_GDB=n
+CT_DEBUG_STRACE=n
+CT_COMP_TOOLS_AUTOCONF=y
+CT_COMP_TOOLS_AUTOMAKE=y
+
+# ── Strip installed toolchain to reduce package size ──────────────────────────
+CT_STRIP_ALL_TOOLCHAIN_EXECUTABLES=y
