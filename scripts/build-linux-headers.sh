@@ -12,19 +12,11 @@ PACKAGE_NAME="linux-libc-dev-xtensa-${VARIANT}-cross"
 
 log_info "Installing Linux ${KERNEL_VERSION} headers for ${TARGET} into sysroot"
 
-# Extract kernel source if not already done.
-# Prefer the pre-downloaded tarball in the repo root.
-REPO_TARBALL="${SCRIPT_DIR}/../linux-${KERNEL_VERSION}.tar.xz"
 if [ ! -d "linux-${KERNEL_VERSION}" ]; then
-    if [ -f "${REPO_TARBALL}" ]; then
-        log_info "Extracting linux-${KERNEL_VERSION}.tar.xz..."
-        tar xf "${REPO_TARBALL}"
-    else
-        log_info "Downloading Linux ${KERNEL_VERSION}..."
-        wget -q --show-progress \
-            "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${KERNEL_VERSION}.tar.xz"
-        tar xf "linux-${KERNEL_VERSION}.tar.xz"
-    fi
+    log_info "Downloading Linux ${KERNEL_VERSION}..."
+    wget -q --show-progress \
+        "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${KERNEL_VERSION}.tar.xz"
+    tar xf "linux-${KERNEL_VERSION}.tar.xz"
 fi
 
 # Install xtensa kernel headers into the sysroot
