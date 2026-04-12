@@ -7,67 +7,109 @@ CHIP=$2     # esp32 or esp32s3
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 
-log_info "Extracting glibc for ${TARGET} from crosstool-NG sysroot"
+log_info "Building glibc for ${TARGET} (${CHIP})"
 
-# Locate the toolchain sysroot.
-# crosstool-NG installs the sysroot at ${TOOLCHAIN_DIR}/${TARGET}/sysroot/
-# We also try asking GCC directly.
-if ${TOOLCHAIN_BIN}/${CC} --version >/dev/null 2>&1; then
-    SYSROOT_PATH=$(${TOOLCHAIN_BIN}/${CC} -print-sysroot 2>/dev/null || true)
-fi
-if [ -z "${SYSROOT_PATH:-}" ] || [ ! -d "${SYSROOT_PATH}" ]; then
-    SYSROOT_PATH="${TOOLCHAIN_DIR}/${TARGET}/sysroot"
-fi
-if [ ! -d "${SYSROOT_PATH}" ]; then
-    log_error "Cannot find toolchain sysroot (tried ${TOOLCHAIN_DIR}/${TARGET}/sysroot)"
-    log_error "Make sure the crosstool-NG toolchain is installed at ${TOOLCHAIN_DIR}"
-    exit 1
-fi
-log_info "Sysroot: ${SYSROOT_PATH}"
+GLIBC_VERSION=2.39
+LIB_DIR="${TARGET}"
+SYSROOT_DIR="/opt/xtensa-${VARIANT}/${TARGET}/sysroot"
+REPO_ROOT="$(pwd)"          # capture before any cd
+BUILD_DIR="${REPO_ROOT}/build/glibc-${VARIANT}"
+PKG_VERSION="${GLIBC_VERSION}-0ubuntu1"
 
-# Detect glibc version from the installed libc.so.6 or version.h
-GLIBC_VERSION="2.39"
-VERSION_H="${SYSROOT_PATH}/usr/include/features.h"
-if [ -f "${VERSION_H}" ]; then
-    DETECTED=$(grep -oP '__GLIBC__\s+\K\d+' "${VERSION_H}" 2>/dev/null | head -1 || true)
-    DETECTED_MINOR=$(grep -oP '__GLIBC_MINOR__\s+\K\d+' "${VERSION_H}" 2>/dev/null | head -1 || true)
-    if [ -n "${DETECTED}" ] && [ -n "${DETECTED_MINOR}" ]; then
-        GLIBC_VERSION="${DETECTED}.${DETECTED_MINOR}"
-        log_info "Detected glibc version: ${GLIBC_VERSION}"
+# ── Get glibc source from Ubuntu ──────────────────────────────────────────────
+if [ ! -d "glibc-${GLIBC_VERSION}" ]; then
+    log_info "Getting glibc source from Ubuntu..."
+    apt-get source glibc
+    GLIBC_SRC_DIR=$(ls -d glibc-*/ 2>/dev/null | head -1 | sed 's:/$::')
+    if [ -z "$GLIBC_SRC_DIR" ]; then
+        log_error "Failed to extract glibc source"
+        exit 1
+    fi
+    if [ "$GLIBC_SRC_DIR" != "glibc-${GLIBC_VERSION}" ]; then
+        log_info "Renaming $GLIBC_SRC_DIR to glibc-${GLIBC_VERSION}"
+        mv "$GLIBC_SRC_DIR" glibc-${GLIBC_VERSION}
     fi
 fi
 
-PKG_VERSION="${GLIBC_VERSION}-0ubuntu1"
+# ── Verify stage 1 GCC is present ─────────────────────────────────────────────
+STAGE1_GCC="${TOOLCHAIN_BIN}/${CC}"
+if ! "${STAGE1_GCC}" --version >/dev/null 2>&1; then
+    log_error "Stage 1 compiler not found: ${STAGE1_GCC}"
+    log_error "Run build-gcc-stage1.sh first"
+    exit 1
+fi
 
-# Library directory for multiarch layout
-LIB_DIR="${TARGET}"
+# Kernel headers must already be installed in the sysroot
+KERNEL_HEADERS="${SYSROOT_DIR}/usr/include"
+if [ ! -d "${KERNEL_HEADERS}" ]; then
+    log_error "Kernel headers not found at ${KERNEL_HEADERS}"
+    log_error "Run build-linux-headers.sh first"
+    exit 1
+fi
 
-# ── Runtime package (libc6-${VARIANT}) ────────────────────────────────────────
+# ── Build glibc ───────────────────────────────────────────────────────────────
+rm -rf "${BUILD_DIR}"
+mkdir -p "${BUILD_DIR}"
+cd "${BUILD_DIR}"
+
+log_info "Configuring glibc..."
+"../../glibc-${GLIBC_VERSION}/configure" \
+    --prefix=/usr \
+    --host="${TARGET}" \
+    --build=x86_64-linux-gnu \
+    --with-headers="${KERNEL_HEADERS}" \
+    --enable-kernel=5.4.0 \
+    --disable-werror \
+    --disable-multilib \
+    --disable-profile \
+    --without-gd \
+    --without-selinux \
+    --disable-nscd \
+    libc_cv_forced_unwind=yes \
+    libc_cv_c_cleanup=yes \
+    libc_cv_gcc_static_libgcc=-static-libgcc \
+    CFLAGS="-O2 -Wno-error" \
+    CC="${STAGE1_GCC}"
+
+log_info "Building glibc (this takes a while)..."
+make -j${JOBS} 2>&1 | tee build.log || {
+    log_error "glibc build failed — last 80 lines of build.log:"
+    tail -80 build.log
+    exit 1
+}
+
+log_info "Installing glibc into sysroot ${SYSROOT_DIR}..."
+mkdir -p "${SYSROOT_DIR}"
+make install DESTDIR="${SYSROOT_DIR}" 2>&1 | tee -a build.log || {
+    log_error "glibc install failed"
+    tail -30 build.log
+    exit 1
+}
+
+# Return to repo root before creating packages
+cd "${REPO_ROOT}"
+
+# ── Package: libc6-${VARIANT} (runtime) ───────────────────────────────────────
 PKG_NAME="libc6-${VARIANT}"
 log_info "Creating ${PKG_NAME} package..."
-RUNTIME_DIR=$(pwd)/build/${PKG_NAME}
+RUNTIME_DIR="${REPO_ROOT}/build/${PKG_NAME}"
 rm -rf "${RUNTIME_DIR}"
 mkdir -p "${RUNTIME_DIR}/DEBIAN"
 mkdir -p "${RUNTIME_DIR}/usr/lib/${LIB_DIR}"
 
-# Copy versioned shared libraries from sysroot
-# Typical locations in a ct-ng sysroot:
-#   ${SYSROOT}/lib/              (dynamic loader)
-#   ${SYSROOT}/usr/lib/          (libc.so.6, libm.so.6, etc.)
-for src_dir in "${SYSROOT_PATH}/lib" "${SYSROOT_PATH}/usr/lib"; do
-    if [ -d "${src_dir}" ]; then
-        # *.so.*  — versioned shared libraries (libc.so.6, libm.so.6, …)
-        # ld-*.so* — dynamic loaders (ld-linux.so.2, ld-xtensa.so.1, …)
-        # ld.so.* — alternative dynamic loader naming
-        find "${src_dir}" -maxdepth 1 \
-            \( -name "*.so.*" -o -name "ld-*.so*" -o -name "ld.so.*" \) \
-            -exec cp -a {} "${RUNTIME_DIR}/usr/lib/${LIB_DIR}/" \; 2>/dev/null || true
-    fi
+# Copy versioned shared libraries and dynamic loader
+for src_dir in "${SYSROOT_DIR}/lib" "${SYSROOT_DIR}/usr/lib"; do
+    [ -d "${src_dir}" ] || continue
+    find "${src_dir}" -maxdepth 1 \
+        \( -name "*.so.*" -o -name "ld-*.so*" -o -name "ld.so.*" \) \
+        -exec cp -a {} "${RUNTIME_DIR}/usr/lib/${LIB_DIR}/" \; 2>/dev/null || true
 done
 
-# Make sure we have at least libc.so.6
+# Sanity-check: libc.so.6 must be present
 if ! ls "${RUNTIME_DIR}/usr/lib/${LIB_DIR}/libc.so"* >/dev/null 2>&1; then
-    log_error "No libc.so found in sysroot - the toolchain sysroot may be incomplete"
+    log_error "libc.so not found in sysroot — glibc install may have failed"
+    log_error "Contents of ${SYSROOT_DIR}:"
+    find "${SYSROOT_DIR}" -name "libc*" 2>/dev/null | head -20 || true
     exit 1
 fi
 
@@ -88,32 +130,28 @@ Description: GNU C Library: Shared libraries (${ARCH} ${VARIANT} cross-compile)
 EOF
 
 dpkg-deb --build --root-owner-group "${RUNTIME_DIR}" \
-    "build/${PKG_NAME}_${PKG_VERSION}_${ARCH}.deb"
+    "${REPO_ROOT}/build/${PKG_NAME}_${PKG_VERSION}_${ARCH}.deb"
 log_info "Created: ${PKG_NAME}_${PKG_VERSION}_${ARCH}.deb"
 
-# ── Development package (libc6-dev-${VARIANT}) ────────────────────────────────
+# ── Package: libc6-dev-${VARIANT} (development) ───────────────────────────────
 PKG_DEV="libc6-dev-${VARIANT}"
 log_info "Creating ${PKG_DEV} package..."
-DEV_DIR=$(pwd)/build/${PKG_DEV}
+DEV_DIR="${REPO_ROOT}/build/${PKG_DEV}"
 rm -rf "${DEV_DIR}"
 mkdir -p "${DEV_DIR}/DEBIAN"
 mkdir -p "${DEV_DIR}/usr/lib/${LIB_DIR}"
 mkdir -p "${DEV_DIR}/usr/include/${TARGET}"
 
-# Copy headers
-if [ -d "${SYSROOT_PATH}/usr/include" ]; then
-    cp -a "${SYSROOT_PATH}/usr/include/." "${DEV_DIR}/usr/include/${TARGET}/" 2>/dev/null || true
+# Headers (from sysroot — glibc + kernel headers merged by the install)
+if [ -d "${SYSROOT_DIR}/usr/include" ]; then
+    cp -a "${SYSROOT_DIR}/usr/include/." "${DEV_DIR}/usr/include/${TARGET}/"
 fi
 
-# Copy static libraries and unversioned .so symlinks (needed for -l linking)
-for src_dir in "${SYSROOT_PATH}/lib" "${SYSROOT_PATH}/usr/lib"; do
-    if [ -d "${src_dir}" ]; then
-        find "${src_dir}" -maxdepth 1 \( -name "*.a" -o -name "*.o" \) \
-            -exec cp -a {} "${DEV_DIR}/usr/lib/${LIB_DIR}/" \; 2>/dev/null || true
-        # Unversioned .so symlinks for linking (e.g. libc.so -> libc.so.6)
-        find "${src_dir}" -maxdepth 1 -name "*.so" \
-            -exec cp -a {} "${DEV_DIR}/usr/lib/${LIB_DIR}/" \; 2>/dev/null || true
-    fi
+# Static libraries + unversioned symlinks (for -lc linking)
+for src_dir in "${SYSROOT_DIR}/lib" "${SYSROOT_DIR}/usr/lib"; do
+    [ -d "${src_dir}" ] || continue
+    find "${src_dir}" -maxdepth 1 \( -name "*.a" -o -name "*.o" -o -name "*.so" \) \
+        -exec cp -a {} "${DEV_DIR}/usr/lib/${LIB_DIR}/" \; 2>/dev/null || true
 done
 
 cat > "${DEV_DIR}/DEBIAN/control" << EOF
@@ -135,28 +173,26 @@ Description: GNU C Library: Development Libraries and Headers (${ARCH} ${VARIANT
 EOF
 
 dpkg-deb --build --root-owner-group "${DEV_DIR}" \
-    "build/${PKG_DEV}_${PKG_VERSION}_${ARCH}.deb"
+    "${REPO_ROOT}/build/${PKG_DEV}_${PKG_VERSION}_${ARCH}.deb"
 log_info "Created: ${PKG_DEV}_${PKG_VERSION}_${ARCH}.deb"
 
-# ── Debug package (libc6-dbg-${VARIANT}) ──────────────────────────────────────
+# ── Package: libc6-dbg-${VARIANT} (debug) ─────────────────────────────────────
 PKG_DBG="libc6-dbg-${VARIANT}"
 log_info "Creating ${PKG_DBG} package..."
-DBG_DIR=$(pwd)/build/${PKG_DBG}
+DBG_DIR="${REPO_ROOT}/build/${PKG_DBG}"
 rm -rf "${DBG_DIR}"
 mkdir -p "${DBG_DIR}/DEBIAN"
 mkdir -p "${DBG_DIR}/usr/lib/${LIB_DIR}/debug"
 
-# Collect unstripped libraries from the sysroot (if any)
-for src_dir in "${SYSROOT_PATH}/lib" "${SYSROOT_PATH}/usr/lib"; do
-    if [ -d "${src_dir}" ]; then
-        find "${src_dir}" -name "*.so*" -o -name "*.a" | while read -r lib; do
-            if file "${lib}" | grep -q "not stripped"; then
-                subdir=$(dirname "${lib}" | sed "s|${src_dir}||")
-                mkdir -p "${DBG_DIR}/usr/lib/${LIB_DIR}/debug/${subdir}"
-                cp -a "${lib}" "${DBG_DIR}/usr/lib/${LIB_DIR}/debug/${subdir}/" 2>/dev/null || true
-            fi
-        done
-    fi
+for src_dir in "${SYSROOT_DIR}/lib" "${SYSROOT_DIR}/usr/lib"; do
+    [ -d "${src_dir}" ] || continue
+    find "${src_dir}" \( -name "*.so*" -o -name "*.a" \) | while read -r lib; do
+        if file "${lib}" 2>/dev/null | grep -q "not stripped"; then
+            subdir=$(dirname "${lib}" | sed "s|${src_dir}||")
+            mkdir -p "${DBG_DIR}/usr/lib/${LIB_DIR}/debug/${subdir}"
+            cp -a "${lib}" "${DBG_DIR}/usr/lib/${LIB_DIR}/debug/${subdir}/" 2>/dev/null || true
+        fi
+    done
 done
 
 cat > "${DBG_DIR}/DEBIAN/control" << EOF
@@ -169,14 +205,13 @@ Priority: optional
 Depends: ${PKG_NAME} (= ${PKG_VERSION})
 Maintainer: ${MAINTAINER}
 Description: GNU C Library: detached debugging symbols (${ARCH} ${VARIANT} cross-compile)
- This package contains the detached debugging symbols for the GNU C Library
- for Xtensa ${VARIANT} (${CHIP}).
+ Detached debugging symbols for the GNU C Library for Xtensa ${VARIANT} (${CHIP}).
  .
  This package is for cross-compiling.
 EOF
 
 dpkg-deb --build --root-owner-group "${DBG_DIR}" \
-    "build/${PKG_DBG}_${PKG_VERSION}_${ARCH}.deb"
+    "${REPO_ROOT}/build/${PKG_DBG}_${PKG_VERSION}_${ARCH}.deb"
 log_info "Created: ${PKG_DBG}_${PKG_VERSION}_${ARCH}.deb"
 
-log_info "glibc extraction complete!"
+log_info "glibc build and packaging complete!"
