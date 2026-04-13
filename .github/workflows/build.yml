@@ -110,8 +110,9 @@ jobs:
           if [ ! -d "glibc-${GLIBC_VERSION}" ]; then
             apt-get source glibc
             GLIBC_SRC=$(ls -d glibc-*/ 2>/dev/null | head -1 | sed 's:/$::')
-            [ "${GLIBC_SRC}" != "glibc-${GLIBC_VERSION}" ] && \
+            if [ "${GLIBC_SRC}" != "glibc-${GLIBC_VERSION}" ]; then
               mv "${GLIBC_SRC}" "glibc-${GLIBC_VERSION}"
+            fi
           fi
 
       # build-glibc.sh both builds glibc (into the sysroot) and creates the DEB packages.
