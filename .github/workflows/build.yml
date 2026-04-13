@@ -41,7 +41,7 @@ jobs:
 
     env:
       GCC_VERSION: ${{ needs.get-version.outputs.gcc_version }}
-      GLIBC_VERSION: "2.39"
+      GLIBC_VERSION: "2.26"
       LINUX_VERSION: "6.8"
       TARGET: xtensa-${{ matrix.variant.core }}-linux-gnu
       INSTALL_DIR: /opt/xtensa-${{ matrix.variant.core }}

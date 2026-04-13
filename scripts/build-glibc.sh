@@ -9,26 +9,23 @@ source "${SCRIPT_DIR}/common.sh"
 
 log_info "Building glibc for ${TARGET} (${CHIP})"
 
-GLIBC_VERSION=2.39
+# Upstream glibc does not support Xtensa; use jcmvbkbc's fork which adds
+# full Xtensa support including windowed (call8) ABI.
+GLIBC_VERSION=2.26
+GLIBC_BRANCH="xtensa"
+GLIBC_REPO="https://github.com/jcmvbkbc/glibc-xtensa.git"
+GLIBC_SRC_DIR="glibc-xtensa-${GLIBC_VERSION}"
 LIB_DIR="${TARGET}"
 SYSROOT_DIR="/opt/xtensa-${VARIANT}/${TARGET}/sysroot"
 REPO_ROOT="$(pwd)"          # capture before any cd
 BUILD_DIR="${REPO_ROOT}/build/glibc-${VARIANT}"
-PKG_VERSION="${GLIBC_VERSION}-0ubuntu1"
+PKG_VERSION="${GLIBC_VERSION}"
 
-# ── Get glibc source from Ubuntu ──────────────────────────────────────────────
-if [ ! -d "glibc-${GLIBC_VERSION}" ]; then
-    log_info "Getting glibc source from Ubuntu..."
-    apt-get source glibc
-    GLIBC_SRC_DIR=$(ls -d glibc-*/ 2>/dev/null | head -1 | sed 's:/$::')
-    if [ -z "$GLIBC_SRC_DIR" ]; then
-        log_error "Failed to extract glibc source"
-        exit 1
-    fi
-    if [ "$GLIBC_SRC_DIR" != "glibc-${GLIBC_VERSION}" ]; then
-        log_info "Renaming $GLIBC_SRC_DIR to glibc-${GLIBC_VERSION}"
-        mv "$GLIBC_SRC_DIR" glibc-${GLIBC_VERSION}
-    fi
+# ── Get glibc-xtensa source ───────────────────────────────────────────────────
+if [ ! -d "${GLIBC_SRC_DIR}" ]; then
+    log_info "Cloning jcmvbkbc/glibc-xtensa (branch ${GLIBC_BRANCH})..."
+    git clone --branch "${GLIBC_BRANCH}" --depth 1 \
+        "${GLIBC_REPO}" "${GLIBC_SRC_DIR}"
 fi
 
 # ── Verify stage 1 GCC is present ─────────────────────────────────────────────
@@ -53,7 +50,7 @@ mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
 log_info "Configuring glibc..."
-"../../glibc-${GLIBC_VERSION}/configure" \
+"../../${GLIBC_SRC_DIR}/configure" \
     --prefix=/usr \
     --host="${TARGET}" \
     --build=x86_64-linux-gnu \
@@ -69,7 +66,7 @@ log_info "Configuring glibc..."
     libc_cv_c_cleanup=yes \
     libc_cv_gcc_static_libgcc=-static-libgcc \
     libc_cv_alias_attribute_warning=no \
-    CFLAGS="-O2 -Wno-error" \
+    CFLAGS="-O2 -Wno-error -std=gnu11" \
     CC="${STAGE1_GCC}" \
     || {
         log_error "glibc configure failed — config.log tail:"
