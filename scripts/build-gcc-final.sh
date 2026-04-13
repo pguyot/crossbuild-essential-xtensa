@@ -35,10 +35,10 @@ if [ -z "$GCC_CONFIGURE" ]; then
     exit 1
 fi
 
-# Verify glibc is in the sysroot
-if ! ls "${SYSROOT_DIR}/usr/lib/libc.so"* >/dev/null 2>&1; then
-    log_error "glibc not found in sysroot ${SYSROOT_DIR}."
-    log_error "Run build-glibc.sh first."
+# Verify musl is in the sysroot
+if [ ! -f "${SYSROOT_DIR}/lib/ld-musl-xtensa.so.1" ]; then
+    log_error "musl not found in sysroot ${SYSROOT_DIR}."
+    log_error "Run build-musl.sh first."
     exit 1
 fi
 

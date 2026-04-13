@@ -41,7 +41,7 @@ jobs:
 
     env:
       GCC_VERSION: ${{ needs.get-version.outputs.gcc_version }}
-      GLIBC_VERSION: "2.39"
+      MUSL_VERSION: "1.2.5"
       LINUX_VERSION: "6.8"
       TARGET: xtensa-${{ matrix.variant.core }}-linux-gnu
       INSTALL_DIR: /opt/xtensa-${{ matrix.variant.core }}
@@ -78,6 +78,7 @@ jobs:
             dpkg-dev devscripts debhelper \
             qemu-user
 
+
       - name: Download and extract Linux ${{ env.LINUX_VERSION }} kernel source
         run: |
           mkdir -p build
@@ -105,21 +106,11 @@ jobs:
       - name: Build GCC ${{ env.GCC_VERSION }} stage 1 (bootstrap) for ${{ env.TARGET }}
         run: bash scripts/build-gcc-stage1.sh "${VARIANT}" "${CHIP}"
 
-      - name: Get glibc ${{ env.GLIBC_VERSION }} source from Ubuntu
-        run: |
-          if [ ! -d "glibc-${GLIBC_VERSION}" ]; then
-            apt-get source glibc
-            GLIBC_SRC=$(ls -d glibc-*/ 2>/dev/null | head -1 | sed 's:/$::')
-            if [ "${GLIBC_SRC}" != "glibc-${GLIBC_VERSION}" ]; then
-              mv "${GLIBC_SRC}" "glibc-${GLIBC_VERSION}"
-            fi
-          fi
-
-      # build-glibc.sh both builds glibc (into the sysroot) and creates the DEB packages.
+      # build-musl.sh builds musl (into the sysroot) and creates the DEB packages.
       # It must run after GCC stage 1 and after kernel headers are in the sysroot,
-      # but BEFORE GCC final (which needs the sysroot with glibc to link libstdc++ etc.)
-      - name: Build glibc ${{ env.GLIBC_VERSION }} for ${{ env.TARGET }} and create DEB packages
-        run: bash scripts/build-glibc.sh "${VARIANT}" "${CHIP}"
+      # but BEFORE GCC final (which needs the sysroot with musl to link libstdc++ etc.)
+      - name: Build musl ${{ env.MUSL_VERSION }} for ${{ env.TARGET }} and create DEB packages
+        run: bash scripts/build-musl.sh "${VARIANT}" "${CHIP}"
 
       - name: Build GCC ${{ env.GCC_VERSION }} final for ${{ env.TARGET }}
         run: bash scripts/build-gcc-final.sh "${VARIANT}" "${CHIP}"
@@ -160,14 +151,14 @@ jobs:
           Architecture: ${PKG_ARCH}
           Installed-Size: ${INSTALLED_SIZE}
           Maintainer: GitHub Actions <noreply@github.com>
-          Description: Xtensa GNU Toolchain for ${{ matrix.variant.name }} (Linux/glibc)
+          Description: Xtensa GNU Toolchain for ${{ matrix.variant.name }} (Linux/musl)
            Cross-compilation toolchain for Xtensa ${{ matrix.variant.name }} targeting
-           Linux userspace with glibc.  Uses the windowed register ABI (call8),
+           Linux userspace with musl libc.  Uses the windowed register ABI (call8),
            matching the ESP-IDF ABI.
            .
            Suitable for cross-compiling AtomVM and running tests under qemu-user-xtensa.
            .
-           GCC: ${GCC_VERSION}  Binutils: 2.42  glibc: ${GLIBC_VERSION}
+           GCC: ${GCC_VERSION}  Binutils: 2.42  musl: ${MUSL_VERSION}
            Core: ${VARIANT}  Chip: ${CHIP}
            Target triple: ${TARGET}
           EOF
@@ -185,8 +176,8 @@ jobs:
           echo "pkg_name=${PKG_NAME}" >> $GITHUB_ENV
           echo "pkg_version=${PKG_VERSION}" >> $GITHUB_ENV
 
-      - name: List glibc packages
-        run: ls -lh build/libc6*-${VARIANT}*.deb 2>/dev/null || true
+      - name: List musl packages
+        run: ls -lh build/libmusl*-${VARIANT}*.deb 2>/dev/null || true
 
       - name: Build zlib packages
         run: bash scripts/build-zlib.sh "${VARIANT}" "${CHIP}"
@@ -249,7 +240,7 @@ jobs:
             sudo dpkg -i xtensa-lx6-linux-gnu-toolchain_*.deb
             export PATH=/opt/xtensa-lx6/bin:$PATH
 
-            sudo dpkg -i libc6-lx6_*.deb libc6-dev-lx6_*.deb
+            sudo dpkg -i libmusl-lx6_*.deb libmusl-dev-lx6_*.deb
             sudo dpkg -i zlib1g-lx6_*.deb zlib1g-dev-lx6_*.deb
             ```
 

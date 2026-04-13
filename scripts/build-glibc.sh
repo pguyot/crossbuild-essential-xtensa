@@ -68,8 +68,14 @@ log_info "Configuring glibc..."
     libc_cv_forced_unwind=yes \
     libc_cv_c_cleanup=yes \
     libc_cv_gcc_static_libgcc=-static-libgcc \
+    libc_cv_alias_attribute_warning=no \
     CFLAGS="-O2 -Wno-error" \
-    CC="${STAGE1_GCC}"
+    CC="${STAGE1_GCC}" \
+    || {
+        log_error "glibc configure failed — config.log tail:"
+        tail -100 config.log 2>/dev/null || true
+        exit 1
+    }
 
 log_info "Building glibc (this takes a while)..."
 make -j${JOBS} 2>&1 | tee build.log || {
