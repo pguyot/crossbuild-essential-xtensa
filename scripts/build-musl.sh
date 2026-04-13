@@ -8,26 +8,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 
 MUSL_VERSION=1.2.5
+# Upstream musl does not support Xtensa; use jcmvbkbc's fork which adds
+# Xtensa support including FDPIC (required for shared libraries on Xtensa).
+MUSL_BRANCH="xtensa-${MUSL_VERSION}-fdpic"
+MUSL_SRC_DIR="musl-xtensa-${MUSL_BRANCH}"
 SYSROOT_DIR="/opt/xtensa-${VARIANT}/${TARGET}/sysroot"
 REPO_ROOT="$(pwd)"
 BUILD_DIR="${REPO_ROOT}/build/musl-${VARIANT}"
 
-log_info "Building musl ${MUSL_VERSION} for ${TARGET} (${CHIP})"
+log_info "Building musl ${MUSL_VERSION} (jcmvbkbc/musl-xtensa@${MUSL_BRANCH}) for ${TARGET} (${CHIP})"
 
 # ── Download musl source ───────────────────────────────────────────────────────
-if [ ! -d "musl-${MUSL_VERSION}" ]; then
-    log_info "Downloading musl ${MUSL_VERSION}..."
+if [ ! -d "${MUSL_SRC_DIR}" ]; then
+    log_info "Downloading musl-xtensa ${MUSL_BRANCH}..."
     wget -q --show-progress \
-        "https://musl.libc.org/releases/musl-${MUSL_VERSION}.tar.gz"
-    tar xf "musl-${MUSL_VERSION}.tar.gz"
-fi
-
-# Verify musl has xtensa architecture support
-if [ ! -d "musl-${MUSL_VERSION}/arch/xtensa" ]; then
-    log_error "musl ${MUSL_VERSION} does not include xtensa architecture support."
-    log_error "Available arches: $(ls musl-${MUSL_VERSION}/arch/ | tr '\n' ' ')"
-    log_error "You need a musl version with xtensa patches (e.g. from musl-cross-make)."
-    exit 1
+        "https://github.com/jcmvbkbc/musl-xtensa/archive/refs/heads/${MUSL_BRANCH}.tar.gz" \
+        -O "musl-xtensa-${MUSL_BRANCH}.tar.gz"
+    tar xf "musl-xtensa-${MUSL_BRANCH}.tar.gz"
 fi
 
 # ── Verify stage 1 GCC is present ─────────────────────────────────────────────
@@ -53,7 +50,7 @@ cd "${BUILD_DIR}"
 log_info "Configuring musl..."
 # musl detects the target architecture from CC -dumpmachine.
 # --syslibdir=/lib places ld-musl-xtensa.so.1 under /lib (the ELF interpreter path).
-"../../musl-${MUSL_VERSION}/configure" \
+"../../${MUSL_SRC_DIR}/configure" \
     --prefix=/usr \
     --syslibdir=/lib \
     --disable-werror \
