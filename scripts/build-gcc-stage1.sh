@@ -26,6 +26,24 @@ if [ ! -d "gcc-${GCC_VERSION}" ]; then
         log_info "Renaming $GCC_SRC_DIR to gcc-${GCC_VERSION}"
         mv "$GCC_SRC_DIR" gcc-${GCC_VERSION}
     fi
+    # Ubuntu package contains a nested tarball - extract if present
+    cd gcc-${GCC_VERSION}
+    if [ -f "gcc-${GCC_VERSION}.tar.xz" ]; then
+        log_info "Extracting nested GCC tarball from Ubuntu package..."
+        tar xf gcc-${GCC_VERSION}.tar.xz
+        if [ -d "gcc-${GCC_VERSION}" ]; then
+            mv gcc-${GCC_VERSION} src
+        fi
+    fi
+    # Download prerequisites if needed (Ubuntu package may already include them)
+    if [ -f "src/contrib/download_prerequisites" ]; then
+        log_info "Downloading GCC prerequisites..."
+        cd src && ./contrib/download_prerequisites && cd ..
+    elif [ -f "contrib/download_prerequisites" ]; then
+        log_info "Downloading GCC prerequisites..."
+        ./contrib/download_prerequisites
+    fi
+    cd ..
 fi
 
 # Detect configure script location (Ubuntu package may nest source differently)
