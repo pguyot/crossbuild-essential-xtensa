@@ -80,6 +80,15 @@ if [ ! -d "${OVERLAY_DIR}" ]; then
 fi
 log_info "Applying xtensa_${CHIP} overlay to GCC (little-endian)..."
 cp "${OVERLAY_DIR}/include/xtensa-config.h" "${GCC_SRC_ROOT}/gcc/config/xtensa/xtensa-config.h"
+# Disable MULUH/MULSH (MUL32_HIGH) so that binaries produced by this
+# toolchain (including glibc) run under qemu-xtensa: no QEMU Xtensa
+# user-mode CPU implements MUL32_HIGH.  Code is still correct on real
+# ESP32 hardware.  build-gcc-final.sh reuses this same source tree, so
+# both stage-1 and the final compiler stay within QEMU's ISA.
+sed -i \
+    's/^\(#define XCHAL_HAVE_MUL32_HIGH[[:space:]]*\)1/\10/' \
+    "${GCC_SRC_ROOT}/gcc/config/xtensa/xtensa-config.h"
+log_info "XCHAL_HAVE_MUL32_HIGH forced to 0 for QEMU user-mode compatibility"
 
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
