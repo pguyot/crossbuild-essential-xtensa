@@ -62,6 +62,25 @@ if [ -z "$GCC_CONFIGURE" ]; then
 fi
 GCC_SRC_ROOT="$(dirname "${GCC_CONFIGURE}")"
 
+# Apply Espressif's xtensa overlay so GCC targets little-endian.
+# The overlay's xtensa-config.h overrides XCHAL_HAVE_BE=1 (the upstream
+# default) with XCHAL_HAVE_BE=0 and supplies the full ISA description for the
+# specific core.  build-gcc-final.sh reuses the same source tree so the
+# overlay only needs to be applied once here.
+OVERLAYS_DIR="$(pwd)/xtensa-overlays"
+if [ ! -d "${OVERLAYS_DIR}" ]; then
+    log_info "Cloning espressif/xtensa-overlays..."
+    git clone --depth=1 https://github.com/espressif/xtensa-overlays.git "${OVERLAYS_DIR}"
+fi
+OVERLAY_DIR="${OVERLAYS_DIR}/xtensa_${CHIP}/gcc"
+if [ ! -d "${OVERLAY_DIR}" ]; then
+    log_error "Overlay not found: ${OVERLAY_DIR}"
+    log_error "Available overlays: $(ls "${OVERLAYS_DIR}/")"
+    exit 1
+fi
+log_info "Applying xtensa_${CHIP} overlay to GCC (little-endian)..."
+cp "${OVERLAY_DIR}/include/xtensa-config.h" "${GCC_SRC_ROOT}/gcc/config/xtensa/xtensa-config.h"
+
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
