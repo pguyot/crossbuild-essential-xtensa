@@ -128,7 +128,8 @@ jobs:
             > /tmp/hello.c
           "${INSTALL_DIR}/bin/${TARGET}-gcc" -o /tmp/hello /tmp/hello.c
           file /tmp/hello
-          qemu-xtensa -L "${SYSROOT}" /tmp/hello
+          "${INSTALL_DIR}/bin/${TARGET}-objdump" -d /tmp/hello
+          qemu-xtensa -cpu "${CHIP}" -L "${SYSROOT}" /tmp/hello
 
       - name: Create toolchain DEB package
         run: |
