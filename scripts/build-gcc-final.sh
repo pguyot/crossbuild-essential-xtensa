@@ -48,6 +48,11 @@ cd "${BUILD_DIR}"
 
 log_info "Configuring GCC final..."
 unset CC CXX AR RANLIB STRIP CFLAGS CXXFLAGS LDFLAGS
+# -mlongcalls is required for target libraries (libstdc++, libgcc) to avoid
+# "call8: call target out of range" link errors when the shared library grows
+# larger than the ~32 MB PC-relative reach of the Xtensa call8 instruction.
+export CFLAGS_FOR_TARGET="-mlongcalls -O2"
+export CXXFLAGS_FOR_TARGET="-mlongcalls -O2"
 "${GCC_CONFIGURE}" \
     --target="${TARGET}" \
     --prefix="${INSTALL_DIR}" \
