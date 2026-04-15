@@ -29,8 +29,24 @@ jobs:
             echo "Building toolchain with GCC ${GCC_VERSION}"
           fi
 
+  build-qemu:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+
+      - name: Build qemu-xtensa DEB from Espressif fork
+        run: bash scripts/build-qemu.sh
+
+      - name: Upload qemu DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-xtensa-esp
+          path: build/qemu-xtensa-esp_*.deb
+          retention-days: 7
+
   build:
-    needs: get-version
+    needs: [get-version, build-qemu]
     runs-on: ubuntu-24.04
     timeout-minutes: 480  # full 3-stage build takes ~3-4 h per variant
     strategy:
@@ -79,6 +95,15 @@ jobs:
             qemu-user
 
 
+      - name: Download and install qemu-xtensa-esp
+        uses: actions/download-artifact@v4
+        with:
+          name: qemu-xtensa-esp
+          path: /tmp/qemu-esp
+
+      - name: Install qemu-xtensa-esp DEB
+        run: sudo dpkg -i /tmp/qemu-esp/qemu-xtensa-esp_*.deb
+
       - name: Download and extract Linux ${{ env.LINUX_VERSION }} kernel source
         run: |
           mkdir -p build
@@ -123,13 +148,16 @@ jobs:
           echo "Sysroot: ${SYSROOT}"
           ls "${SYSROOT}/usr/lib/" | head -15
 
+          echo "=== qemu-xtensa ==="
+          qemu-xtensa --version
+
           echo "=== Compile and run Hello World under qemu-xtensa ==="
           printf '#include <stdio.h>\nint main(void){puts("hello xtensa");return 0;}\n' \
             > /tmp/hello.c
           "${INSTALL_DIR}/bin/${TARGET}-gcc" -o /tmp/hello /tmp/hello.c
           file /tmp/hello
           "${INSTALL_DIR}/bin/${TARGET}-objdump" -d /tmp/hello
-          qemu-xtensa -cpu dc233c -L "${SYSROOT}" /tmp/hello
+          qemu-xtensa -cpu "${CHIP}" -L "${SYSROOT}" /tmp/hello
 
       - name: Create toolchain DEB package
         run: |
