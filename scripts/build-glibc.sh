@@ -44,6 +44,16 @@ if [ ! -d "${KERNEL_HEADERS}" ]; then
     exit 1
 fi
 
+# ── Patch glibc ──────────────────────────────────────────────────────────────
+PATCH_DIR="${REPO_ROOT}/patches"
+if [ -d "${PATCH_DIR}" ]; then
+    for p in "${PATCH_DIR}"/glibc-*.patch; do
+        [ -f "$p" ] || continue
+        log_info "Applying patch: $(basename "$p")"
+        patch -N -d "${GLIBC_SRC_DIR}" -p1 < "$p" || true
+    done
+fi
+
 # ── Build glibc ───────────────────────────────────────────────────────────────
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
@@ -151,7 +161,10 @@ if [ -d "${SYSROOT_DIR}/usr/include" ]; then
 fi
 
 # Static libraries + unversioned symlinks (for -lc linking)
-for src_dir in "${SYSROOT_DIR}/lib" "${SYSROOT_DIR}/usr/lib"; do
+# Only copy from usr/lib (where glibc installs dev files).
+# Exclude versioned .so files (e.g. ld-2.26.so, libc-2.26.so) which belong
+# in the runtime package — only pick up linker scripts and unversioned symlinks.
+for src_dir in "${SYSROOT_DIR}/usr/lib"; do
     [ -d "${src_dir}" ] || continue
     find "${src_dir}" -maxdepth 1 \( -name "*.a" -o -name "*.o" -o -name "*.so" \) \
         -exec cp -a {} "${DEV_DIR}/usr/lib/${LIB_DIR}/" \; 2>/dev/null || true

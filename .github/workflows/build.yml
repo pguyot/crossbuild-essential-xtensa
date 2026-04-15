@@ -161,12 +161,10 @@ jobs:
           echo "=== Dynamic linking smoke test ==="
           "${INSTALL_DIR}/bin/${TARGET}-gcc" -o /tmp/hello-dyn /tmp/hello.c
           file /tmp/hello-dyn
-          "${INSTALL_DIR}/bin/${TARGET}-objdump" -d /tmp/hello-dyn
           echo "Sysroot lib layout:"
           ls "${SYSROOT}/lib/" 2>/dev/null || echo "(empty)"
           ls "${SYSROOT}/usr/lib/" | grep -E "^(libc|ld)" | head -10
-          qemu-xtensa -cpu "${CHIP}" -L "${SYSROOT}" /tmp/hello-dyn || \
-            echo "WARNING: dynamic binary failed — ld.so.1 relocation issue (known, static build passes)"
+          qemu-xtensa -cpu "${CHIP}" -L "${SYSROOT}" /tmp/hello-dyn
 
       - name: Create toolchain DEB package
         run: |

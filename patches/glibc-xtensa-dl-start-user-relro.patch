@@ -1,0 +1,27 @@
+xtensa: remove __libc_stack_end store from _dl_start_user
+
+_dl_start_user runs AFTER dl_main has applied RELRO protection.
+__libc_stack_end is declared with attribute_relro (in elf/dl-sysdep.c),
+so the s32i to it segfaults because the page has been mprotect'd
+read-only.
+
+The C code in _dl_sysdep_start() already sets
+  __libc_stack_end = DL_STACK_END(start_argptr)
+before RELRO is applied, so the asm store is both redundant and fatal.
+
+Without this patch, any dynamically-linked xtensa binary segfaults
+in the dynamic linker under qemu-user (and on real Linux/xtensa).
+
+--- a/sysdeps/xtensa/dl-machine.h
++++ b/sysdeps/xtensa/dl-machine.h
+@@ -117,9 +117,7 @@
+ _dl_start_user:\n\
+ 	# save user_entry_point so we can jump to it\n\
+ 	mov	a3, a6\n\
+-	# store the highest stack address in __libc_stack_end\n\
+-	movi	a4, __libc_stack_end\n\
+-	s32i	sp, a4, 0\n\
++	# __libc_stack_end is already set by _dl_sysdep_start() before RELRO.\n\
+ 	# load _dl_skip_args into a4\n\
+ 	movi	a4, _dl_skip_args\n\
+ 	l32i	a4, a4, 0\n\
