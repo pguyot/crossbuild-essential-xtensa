@@ -156,8 +156,7 @@ jobs:
             > /tmp/hello.c
           "${INSTALL_DIR}/bin/${TARGET}-gcc" -static -o /tmp/hello /tmp/hello.c
           file /tmp/hello
-          # qemu-xtensa wrapper defaults to -cpu esp32; no explicit -cpu needed.
-          qemu-xtensa /tmp/hello
+          qemu-xtensa -cpu "${CHIP}" /tmp/hello
 
           echo "=== Dynamic linking smoke test ==="
           "${INSTALL_DIR}/bin/${TARGET}-gcc" -o /tmp/hello-dyn /tmp/hello.c
@@ -168,7 +167,7 @@ jobs:
           # The libc6 runtime DEB is not yet installed here so we still point at the
           # build sysroot.  Once the DEB is installed to /usr/xtensa-lx6-linux-gnu/,
           # the binary runs without -L thanks to --interp-prefix built into qemu-xtensa.
-          qemu-xtensa -L "${SYSROOT}" /tmp/hello-dyn
+          qemu-xtensa -cpu "${CHIP}" -L "${SYSROOT}" /tmp/hello-dyn
 
       - name: Create toolchain DEB package
         run: |
