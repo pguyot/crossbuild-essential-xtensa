@@ -59,9 +59,9 @@ log_info "Creating ${PKG_RT} package..."
 RT_DIR=$(pwd)/build/${PKG_RT}
 rm -rf "${RT_DIR}"
 mkdir -p "${RT_DIR}/DEBIAN"
-mkdir -p "${RT_DIR}/usr/lib/${LIB_DIR}"
+mkdir -p "${RT_DIR}/usr/${LIB_DIR}/lib"
 
-cp -a "${INSTALL_DIR}${PREFIX}/lib/libz.so."* "${RT_DIR}/usr/lib/${LIB_DIR}/" 2>/dev/null || true
+cp -a "${INSTALL_DIR}${PREFIX}/lib/libz.so."* "${RT_DIR}/usr/${LIB_DIR}/lib/" 2>/dev/null || true
 
 cat > "${RT_DIR}/DEBIAN/control" << EOF
 Package: ${PKG_RT}
@@ -88,21 +88,21 @@ log_info "Creating ${PKG_DEV} package..."
 DEV_DIR=$(pwd)/build/${PKG_DEV}
 rm -rf "${DEV_DIR}"
 mkdir -p "${DEV_DIR}/DEBIAN"
-mkdir -p "${DEV_DIR}/usr/lib/${LIB_DIR}"
-mkdir -p "${DEV_DIR}/usr/include/${TARGET}"
+mkdir -p "${DEV_DIR}/usr/${LIB_DIR}/lib"
+mkdir -p "${DEV_DIR}/usr/${TARGET}/include"
 
-cp -a "${INSTALL_DIR}${PREFIX}/include/"*.h "${DEV_DIR}/usr/include/${TARGET}/" 2>/dev/null || true
-cp -a "${INSTALL_DIR}${PREFIX}/lib/libz.so"  "${DEV_DIR}/usr/lib/${LIB_DIR}/" 2>/dev/null || true
-cp -a "${INSTALL_DIR}${PREFIX}/lib/"*.a       "${DEV_DIR}/usr/lib/${LIB_DIR}/" 2>/dev/null || true
+cp -a "${INSTALL_DIR}${PREFIX}/include/"*.h "${DEV_DIR}/usr/${TARGET}/include/" 2>/dev/null || true
+cp -a "${INSTALL_DIR}${PREFIX}/lib/libz.so"  "${DEV_DIR}/usr/${LIB_DIR}/lib/" 2>/dev/null || true
+cp -a "${INSTALL_DIR}${PREFIX}/lib/"*.a       "${DEV_DIR}/usr/${LIB_DIR}/lib/" 2>/dev/null || true
 
-mkdir -p "${DEV_DIR}/usr/lib/${LIB_DIR}/pkgconfig"
+mkdir -p "${DEV_DIR}/usr/${LIB_DIR}/lib/pkgconfig"
 if [ -f "${INSTALL_DIR}${PREFIX}/lib/pkgconfig/zlib.pc" ]; then
     cp "${INSTALL_DIR}${PREFIX}/lib/pkgconfig/zlib.pc" \
-       "${DEV_DIR}/usr/lib/${LIB_DIR}/pkgconfig/"
-    sed -i "s|libdir=.*|libdir=/usr/lib/${LIB_DIR}|g" \
-        "${DEV_DIR}/usr/lib/${LIB_DIR}/pkgconfig/zlib.pc"
-    sed -i "s|includedir=.*|includedir=/usr/include/${TARGET}|g" \
-        "${DEV_DIR}/usr/lib/${LIB_DIR}/pkgconfig/zlib.pc"
+       "${DEV_DIR}/usr/${LIB_DIR}/lib/pkgconfig/"
+    sed -i "s|libdir=.*|libdir=/usr/${LIB_DIR}/lib|g" \
+        "${DEV_DIR}/usr/${LIB_DIR}/lib/pkgconfig/zlib.pc"
+    sed -i "s|includedir=.*|includedir=/usr/${TARGET}/include|g" \
+        "${DEV_DIR}/usr/${LIB_DIR}/lib/pkgconfig/zlib.pc"
 fi
 
 cat > "${DEV_DIR}/DEBIAN/control" << EOF
@@ -122,7 +122,8 @@ Description: compression library - development (${ARCH} ${VARIANT} cross-compile
  .
  This package is for cross-compiling.
  .
- Headers are installed at /usr/include/${TARGET}.
+ Headers are installed at /usr/${TARGET}/include.
+ Libraries are installed at /usr/${TARGET}/lib.
 EOF
 
 dpkg-deb --build "${DEV_DIR}" "build/${PKG_DEV}_${ZLIB_VERSION}-0ubuntu1_${ARCH}.deb"

@@ -108,18 +108,18 @@ log_info "Creating ${PKG_NAME} package..."
 RUNTIME_DIR="${REPO_ROOT}/build/${PKG_NAME}"
 rm -rf "${RUNTIME_DIR}"
 mkdir -p "${RUNTIME_DIR}/DEBIAN"
-mkdir -p "${RUNTIME_DIR}/usr/lib/${LIB_DIR}"
+mkdir -p "${RUNTIME_DIR}/usr/${LIB_DIR}/lib"
 
 # Copy versioned shared libraries and dynamic loader
 for src_dir in "${SYSROOT_DIR}/lib" "${SYSROOT_DIR}/usr/lib"; do
     [ -d "${src_dir}" ] || continue
     find "${src_dir}" -maxdepth 1 \
         \( -name "*.so.*" -o -name "ld-*.so*" -o -name "ld.so.*" \) \
-        -exec cp -a {} "${RUNTIME_DIR}/usr/lib/${LIB_DIR}/" \; 2>/dev/null || true
+        -exec cp -a {} "${RUNTIME_DIR}/usr/${LIB_DIR}/lib/" \; 2>/dev/null || true
 done
 
 # Sanity-check: libc.so.6 must be present
-if ! ls "${RUNTIME_DIR}/usr/lib/${LIB_DIR}/libc.so"* >/dev/null 2>&1; then
+if ! ls "${RUNTIME_DIR}/usr/${LIB_DIR}/lib/libc.so"* >/dev/null 2>&1; then
     log_error "libc.so not found in sysroot — glibc install may have failed"
     log_error "Contents of ${SYSROOT_DIR}:"
     find "${SYSROOT_DIR}" -name "libc*" 2>/dev/null | head -20 || true
@@ -152,12 +152,12 @@ log_info "Creating ${PKG_DEV} package..."
 DEV_DIR="${REPO_ROOT}/build/${PKG_DEV}"
 rm -rf "${DEV_DIR}"
 mkdir -p "${DEV_DIR}/DEBIAN"
-mkdir -p "${DEV_DIR}/usr/lib/${LIB_DIR}"
-mkdir -p "${DEV_DIR}/usr/include/${TARGET}"
+mkdir -p "${DEV_DIR}/usr/${LIB_DIR}/lib"
+mkdir -p "${DEV_DIR}/usr/${TARGET}/include"
 
 # Headers (from sysroot — glibc + kernel headers merged by the install)
 if [ -d "${SYSROOT_DIR}/usr/include" ]; then
-    cp -a "${SYSROOT_DIR}/usr/include/." "${DEV_DIR}/usr/include/${TARGET}/"
+    cp -a "${SYSROOT_DIR}/usr/include/." "${DEV_DIR}/usr/${TARGET}/include/"
 fi
 
 # Static libraries + unversioned symlinks (for -lc linking)
@@ -167,7 +167,7 @@ fi
 for src_dir in "${SYSROOT_DIR}/usr/lib"; do
     [ -d "${src_dir}" ] || continue
     find "${src_dir}" -maxdepth 1 \( -name "*.a" -o -name "*.o" -o -name "*.so" \) \
-        -exec cp -a {} "${DEV_DIR}/usr/lib/${LIB_DIR}/" \; 2>/dev/null || true
+        -exec cp -a {} "${DEV_DIR}/usr/${LIB_DIR}/lib/" \; 2>/dev/null || true
 done
 
 cat > "${DEV_DIR}/DEBIAN/control" << EOF
@@ -185,7 +185,8 @@ Description: GNU C Library: Development Libraries and Headers (${ARCH} ${VARIANT
  .
  This package is for cross-compiling.
  .
- Headers are installed at /usr/include/${TARGET}.
+ Headers are installed at /usr/${TARGET}/include.
+ Libraries are installed at /usr/${TARGET}/lib.
 EOF
 
 dpkg-deb --build --root-owner-group "${DEV_DIR}" \
@@ -198,15 +199,15 @@ log_info "Creating ${PKG_DBG} package..."
 DBG_DIR="${REPO_ROOT}/build/${PKG_DBG}"
 rm -rf "${DBG_DIR}"
 mkdir -p "${DBG_DIR}/DEBIAN"
-mkdir -p "${DBG_DIR}/usr/lib/${LIB_DIR}/debug"
+mkdir -p "${DBG_DIR}/usr/${LIB_DIR}/lib/debug"
 
 for src_dir in "${SYSROOT_DIR}/lib" "${SYSROOT_DIR}/usr/lib"; do
     [ -d "${src_dir}" ] || continue
     find "${src_dir}" \( -name "*.so*" -o -name "*.a" \) | while read -r lib; do
         if file "${lib}" 2>/dev/null | grep -q "not stripped"; then
             subdir=$(dirname "${lib}" | sed "s|${src_dir}||")
-            mkdir -p "${DBG_DIR}/usr/lib/${LIB_DIR}/debug/${subdir}"
-            cp -a "${lib}" "${DBG_DIR}/usr/lib/${LIB_DIR}/debug/${subdir}/" 2>/dev/null || true
+            mkdir -p "${DBG_DIR}/usr/${LIB_DIR}/lib/debug/${subdir}"
+            cp -a "${lib}" "${DBG_DIR}/usr/${LIB_DIR}/lib/debug/${subdir}/" 2>/dev/null || true
         fi
     done
 done

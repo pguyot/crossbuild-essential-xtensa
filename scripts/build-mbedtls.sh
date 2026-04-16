@@ -65,9 +65,9 @@ log_info "Creating ${PKG_CRYPTO} package..."
 CRYPTO_DIR=$(pwd)/build/${PKG_CRYPTO}
 rm -rf "${CRYPTO_DIR}"
 mkdir -p "${CRYPTO_DIR}/DEBIAN"
-mkdir -p "${CRYPTO_DIR}/usr/lib/${LIB_DIR}"
+mkdir -p "${CRYPTO_DIR}/usr/${LIB_DIR}/lib"
 
-cp -a "${INSTALL_DIR}${PREFIX}/lib/libmbedcrypto.so."* "${CRYPTO_DIR}/usr/lib/${LIB_DIR}/" 2>/dev/null || true
+cp -a "${INSTALL_DIR}${PREFIX}/lib/libmbedcrypto.so."* "${CRYPTO_DIR}/usr/${LIB_DIR}/lib/" 2>/dev/null || true
 
 cat > "${CRYPTO_DIR}/DEBIAN/control" << EOF
 Package: ${PKG_CRYPTO}
@@ -93,9 +93,9 @@ log_info "Creating ${PKG_X509} package..."
 X509_DIR=$(pwd)/build/${PKG_X509}
 rm -rf "${X509_DIR}"
 mkdir -p "${X509_DIR}/DEBIAN"
-mkdir -p "${X509_DIR}/usr/lib/${LIB_DIR}"
+mkdir -p "${X509_DIR}/usr/${LIB_DIR}/lib"
 
-cp -a "${INSTALL_DIR}${PREFIX}/lib/libmbedx509.so."* "${X509_DIR}/usr/lib/${LIB_DIR}/" 2>/dev/null || true
+cp -a "${INSTALL_DIR}${PREFIX}/lib/libmbedx509.so."* "${X509_DIR}/usr/${LIB_DIR}/lib/" 2>/dev/null || true
 
 cat > "${X509_DIR}/DEBIAN/control" << EOF
 Package: ${PKG_X509}
@@ -122,9 +122,9 @@ log_info "Creating ${PKG_TLS} package..."
 TLS_DIR=$(pwd)/build/${PKG_TLS}
 rm -rf "${TLS_DIR}"
 mkdir -p "${TLS_DIR}/DEBIAN"
-mkdir -p "${TLS_DIR}/usr/lib/${LIB_DIR}"
+mkdir -p "${TLS_DIR}/usr/${LIB_DIR}/lib"
 
-cp -a "${INSTALL_DIR}${PREFIX}/lib/libmbedtls.so."* "${TLS_DIR}/usr/lib/${LIB_DIR}/" 2>/dev/null || true
+cp -a "${INSTALL_DIR}${PREFIX}/lib/libmbedtls.so."* "${TLS_DIR}/usr/${LIB_DIR}/lib/" 2>/dev/null || true
 
 cat > "${TLS_DIR}/DEBIAN/control" << EOF
 Package: ${PKG_TLS}
@@ -151,14 +151,14 @@ log_info "Creating ${PKG_DEV} package..."
 DEV_DIR=$(pwd)/build/${PKG_DEV}
 rm -rf "${DEV_DIR}"
 mkdir -p "${DEV_DIR}/DEBIAN"
-mkdir -p "${DEV_DIR}/usr/lib/${LIB_DIR}"
-mkdir -p "${DEV_DIR}/usr/include/${TARGET}"
+mkdir -p "${DEV_DIR}/usr/${LIB_DIR}/lib"
+mkdir -p "${DEV_DIR}/usr/${TARGET}/include"
 
-cp -a "${INSTALL_DIR}${PREFIX}/include/." "${DEV_DIR}/usr/include/${TARGET}/" 2>/dev/null || true
-cp -a "${INSTALL_DIR}${PREFIX}/lib/"*.a "${DEV_DIR}/usr/lib/${LIB_DIR}/" 2>/dev/null || true
+cp -a "${INSTALL_DIR}${PREFIX}/include/." "${DEV_DIR}/usr/${TARGET}/include/" 2>/dev/null || true
+cp -a "${INSTALL_DIR}${PREFIX}/lib/"*.a "${DEV_DIR}/usr/${LIB_DIR}/lib/" 2>/dev/null || true
 # Unversioned symlinks needed for -lmbedtls etc.
 for lib in libmbedcrypto libmbedx509 libmbedtls; do
-    cp -a "${INSTALL_DIR}${PREFIX}/lib/${lib}.so" "${DEV_DIR}/usr/lib/${LIB_DIR}/" 2>/dev/null || true
+    cp -a "${INSTALL_DIR}${PREFIX}/lib/${lib}.so" "${DEV_DIR}/usr/${LIB_DIR}/lib/" 2>/dev/null || true
 done
 
 cat > "${DEV_DIR}/DEBIAN/control" << EOF
@@ -178,7 +178,8 @@ Description: lightweight crypto and SSL/TLS library - development (${ARCH} ${VAR
  .
  This package is for cross-compiling.
  .
- Headers are installed at /usr/include/${TARGET}.
+ Headers are installed at /usr/${TARGET}/include.
+ Libraries are installed at /usr/${TARGET}/lib.
 EOF
 
 dpkg-deb --build "${DEV_DIR}" \

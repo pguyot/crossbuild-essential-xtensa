@@ -156,7 +156,8 @@ jobs:
             > /tmp/hello.c
           "${INSTALL_DIR}/bin/${TARGET}-gcc" -static -o /tmp/hello /tmp/hello.c
           file /tmp/hello
-          qemu-xtensa -cpu "${CHIP}" /tmp/hello
+          # qemu-xtensa wrapper defaults to -cpu esp32; no explicit -cpu needed.
+          qemu-xtensa /tmp/hello
 
           echo "=== Dynamic linking smoke test ==="
           "${INSTALL_DIR}/bin/${TARGET}-gcc" -o /tmp/hello-dyn /tmp/hello.c
@@ -164,7 +165,10 @@ jobs:
           echo "Sysroot lib layout:"
           ls "${SYSROOT}/lib/" 2>/dev/null || echo "(empty)"
           ls "${SYSROOT}/usr/lib/" | grep -E "^(libc|ld)" | head -10
-          qemu-xtensa -cpu "${CHIP}" -L "${SYSROOT}" /tmp/hello-dyn
+          # The libc6 runtime DEB is not yet installed here so we still point at the
+          # build sysroot.  Once the DEB is installed to /usr/xtensa-lx6-linux-gnu/,
+          # the binary runs without -L thanks to --interp-prefix built into qemu-xtensa.
+          qemu-xtensa -L "${SYSROOT}" /tmp/hello-dyn
 
       - name: Create toolchain DEB package
         run: |
@@ -273,19 +277,42 @@ jobs:
             ## Installation
 
             ```bash
+            sudo dpkg -i qemu-xtensa-esp_*.deb
             sudo dpkg -i xtensa-lx6-linux-gnu-toolchain_*.deb
             export PATH=/opt/xtensa-lx6/bin:$PATH
 
             sudo dpkg -i libc6-lx6_*.deb libc6-dev-lx6_*.deb
             sudo dpkg -i zlib1g-lx6_*.deb zlib1g-dev-lx6_*.deb
+            sudo dpkg -i libmbedcrypto7-lx6_*.deb libmbedx509-1-lx6_*.deb libmbedtls14-lx6_*.deb
             ```
 
-            ## Running with qemu-user
+            ## Running with qemu-user (no -L or -cpu needed)
+
+            Runtime libraries are installed to `/usr/xtensa-lx6-linux-gnu/lib/`, which
+            matches the `--interp-prefix` compiled into `qemu-xtensa`.  The wrapper
+            defaults to `-cpu esp32`.  After installing the packages above:
 
             ```bash
             xtensa-lx6-linux-gnu-gcc -o hello hello.c
-            SYSROOT=$(xtensa-lx6-linux-gnu-gcc -print-sysroot)
-            qemu-xtensa -L "$SYSROOT" ./hello
+            qemu-xtensa ./hello          # no -cpu, no -L required
+            ./hello                      # also works via binfmt (activate with systemd-binfmt)
+            ```
+
+            Override the CPU for ESP32-S3 (LX7) binaries:
+            ```bash
+            sudo dpkg -i libc6-lx7_*.deb zlib1g-lx7_*.deb libmbedtls14-lx7_*.deb ...
+            qemu-xtensa -cpu esp32s3 -L /usr/xtensa-lx7-linux-gnu ./hello-lx7
+            ```
+
+            ## binfmt transparent execution
+
+            The `qemu-xtensa-esp` package installs a `/usr/lib/binfmt.d/qemu-xtensa-esp32.conf`
+            entry.  On systemd systems it is activated automatically on package install.
+            On other systems register it manually:
+
+            ```bash
+            echo ':qemu-xtensa-esp32:M::\x7fELF\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x5e\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/local/bin/qemu-xtensa:' \
+              | sudo tee /proc/sys/fs/binfmt_misc/register
             ```
           files: release-packages/*.deb
           draft: false
