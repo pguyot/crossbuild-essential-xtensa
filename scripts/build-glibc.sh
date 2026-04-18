@@ -114,7 +114,7 @@ mkdir -p "${RUNTIME_DIR}/usr/${LIB_DIR}/lib"
 for src_dir in "${SYSROOT_DIR}/lib" "${SYSROOT_DIR}/usr/lib"; do
     [ -d "${src_dir}" ] || continue
     find "${src_dir}" -maxdepth 1 \
-        \( -name "*.so.*" -o -name "ld-*.so*" -o -name "ld.so.*" \) \
+        \( -name "*.so.*" -o -name "ld-*.so*" -o -name "ld.so.*" -o -name "lib*-*.so" \) \
         -exec cp -a {} "${RUNTIME_DIR}/usr/${LIB_DIR}/lib/" \; 2>/dev/null || true
 done
 

@@ -73,13 +73,15 @@ cp "${QEMU_INSTALL_DIR}/bin/qemu-xtensa" "${PKG_DIR}/usr/local/bin/qemu-xtensa-e
 cat > "${PKG_DIR}/usr/local/bin/qemu-xtensa" << 'WRAPPER'
 #!/bin/bash
 cpu_set=false
+l_set=false
 for arg in "$@"; do
-    [ "$arg" = "-cpu" ] && cpu_set=true && break
+    [ "$arg" = "-cpu" ] && cpu_set=true
+    [ "$arg" = "-L" ]   && l_set=true
 done
-if ! $cpu_set; then
-    exec /usr/local/bin/qemu-xtensa-esp32 -cpu "${QEMU_XTENSA_CPU:-esp32}" "$@"
-fi
-exec /usr/local/bin/qemu-xtensa-esp32 "$@"
+extra=()
+$cpu_set || extra+=(-cpu "${QEMU_XTENSA_CPU:-esp32}")
+$l_set   || extra+=(-L "${QEMU_LD_PREFIX:-/usr/xtensa-lx6-linux-gnu}")
+exec /usr/local/bin/qemu-xtensa-esp32 "${extra[@]}" "$@"
 WRAPPER
 chmod 755 "${PKG_DIR}/usr/local/bin/qemu-xtensa"
 
