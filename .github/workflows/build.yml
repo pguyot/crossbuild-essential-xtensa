@@ -243,6 +243,8 @@ jobs:
     needs: [get-version, build]
     runs-on: ubuntu-24.04
     if: needs.get-version.outputs.is_tag == 'true'
+    permissions:
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -317,4 +319,4 @@ jobs:
           draft: false
           prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
