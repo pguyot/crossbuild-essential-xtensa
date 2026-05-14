@@ -64,16 +64,21 @@ export CXXFLAGS_FOR_TARGET="-mlongcalls -O2"
     --disable-nls \
     --disable-werror \
     --disable-multilib \
+    --enable-plugin \
+    --enable-lto \
+    --enable-target-optspace \
+    --enable-multiarch \
     --with-gnu-as \
     --with-gnu-ld
 
 log_info "Building GCC final (this takes 1-2 hours)..."
+# The xtensa overlay is baked into the source (see build-gcc-stage1.sh).
 make -j${JOBS} 2>&1 | tee build.log || {
     log_error "GCC final build failed — last 100 lines of build.log:"
     tail -100 build.log
     exit 1
 }
-sudo make install
+sudo make install-strip
 
 log_info "GCC final installed to ${INSTALL_DIR}"
 log_info ""

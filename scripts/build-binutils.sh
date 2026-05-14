@@ -28,23 +28,17 @@ if [ ! -d "binutils-${BINUTILS_VERSION}" ]; then
     fi
 fi
 
-# Apply Espressif's xtensa overlay so gas assembles little-endian code.
-# The overlay's xtensa-config.h overrides the big-endian defaults baked into
-# binutils' include/xtensa-config.h.
-OVERLAYS_DIR="$(pwd)/xtensa-overlays"
-if [ ! -d "${OVERLAYS_DIR}" ]; then
-    log_info "Cloning espressif/xtensa-overlays..."
-    git clone --depth=1 https://github.com/espressif/xtensa-overlays.git "${OVERLAYS_DIR}"
-fi
-OVERLAY_DIR="${OVERLAYS_DIR}/xtensa_${CHIP}/binutils"
-if [ ! -d "${OVERLAY_DIR}" ]; then
-    log_error "Overlay not found: ${OVERLAY_DIR}"
-    log_error "Available overlays: $(ls "${OVERLAYS_DIR}/")"
-    exit 1
-fi
-log_info "Applying xtensa_${CHIP} overlay to binutils (little-endian)..."
-cp "${OVERLAY_DIR}/include/xtensa-config.h" "binutils-${BINUTILS_VERSION}/include/xtensa-config.h"
-cp "${OVERLAY_DIR}/bfd/xtensa-modules.c"    "binutils-${BINUTILS_VERSION}/bfd/xtensa-modules.c"
+# Statically bake the chip-specific ISA overlay (xtensa-modules.c +
+# xtensa-config.h) into the binutils source before configure.  This is
+# crosstool-NG's traditional approach: each variant gets its own toolchain
+# install with the overlay baked in.  We deliberately avoid the runtime
+# xtensa-dynconfig plugin here — dynconfig works for esp-elf bare-metal but
+# breaks dynamic linking against glibc on xtensa-linux-gnu, where the linker's
+# PLT path was compiled against a different overlay than the runtime overlay.
+OVERLAY_DIR="$(ensure_xtensa_overlay "${CHIP}")"
+log_info "Applying ${CHIP} overlay to binutils source..."
+cp -f "${OVERLAY_DIR}/binutils/bfd/xtensa-modules.c"      "binutils-${BINUTILS_VERSION}/bfd/xtensa-modules.c"
+cp -f "${OVERLAY_DIR}/binutils/include/xtensa-config.h"   "binutils-${BINUTILS_VERSION}/include/xtensa-config.h"
 
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
@@ -68,6 +62,6 @@ make -j${JOBS} 2>&1 | tee build.log || {
     tail -50 build.log
     exit 1
 }
-sudo make install
+sudo make install-strip
 
 log_info "binutils ${BINUTILS_VERSION} installed to ${INSTALL_DIR}"

@@ -40,7 +40,6 @@ fi
 KERNEL_HEADERS="${SYSROOT_DIR}/usr/include"
 if [ ! -d "${KERNEL_HEADERS}" ]; then
     log_error "Kernel headers not found at ${KERNEL_HEADERS}"
-    log_error "Run build-linux-headers.sh first"
     exit 1
 fi
 
@@ -92,8 +91,8 @@ make -j${JOBS} 2>&1 | tee build.log || {
 }
 
 log_info "Installing glibc into sysroot ${SYSROOT_DIR}..."
-mkdir -p "${SYSROOT_DIR}"
-make install DESTDIR="${SYSROOT_DIR}" 2>&1 | tee -a build.log || {
+sudo mkdir -p "${SYSROOT_DIR}"
+sudo make install DESTDIR="${SYSROOT_DIR}" 2>&1 | tee -a build.log || {
     log_error "glibc install failed"
     tail -30 build.log
     exit 1
