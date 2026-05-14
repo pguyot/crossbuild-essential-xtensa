@@ -62,24 +62,36 @@ if [ -z "$GCC_CONFIGURE" ]; then
 fi
 GCC_SRC_ROOT="$(dirname "${GCC_CONFIGURE}")"
 
-# Apply Espressif's xtensa overlay so GCC targets little-endian.
-# The overlay's xtensa-config.h overrides XCHAL_HAVE_BE=1 (the upstream
-# default) with XCHAL_HAVE_BE=0 and supplies the full ISA description for the
-# specific core.  build-gcc-final.sh reuses the same source tree so the
-# overlay only needs to be applied once here.
-OVERLAYS_DIR="$(pwd)/xtensa-overlays"
-if [ ! -d "${OVERLAYS_DIR}" ]; then
-    log_info "Cloning espressif/xtensa-overlays..."
-    git clone --depth=1 https://github.com/espressif/xtensa-overlays.git "${OVERLAYS_DIR}"
+# Apply the same gcc patches Espressif ships in their crosstool-NG.  Most are
+# generic crosstool-NG patches kept here for parity; the xtensa-specific ones
+# (0012-0016) fix real backend bugs.  Notably, 0016 fixes an earlyclobber
+# constraint in *extzvsi-1bit_addsubx that miscompiles `((x & flag) ? c : 0)
+# + y` at -O2/-O3 — exercised by the gcc_bug_repro CI step.
+PATCH_STAMP="${GCC_SRC_ROOT}/.crossbuild-patches-applied"
+if [ ! -f "${PATCH_STAMP}" ]; then
+    PATCH_DIR="${SCRIPT_DIR}/../patches/gcc-${GCC_VERSION}"
+    if [ -d "${PATCH_DIR}" ]; then
+        log_info "Applying gcc patches from ${PATCH_DIR}..."
+        for p in "${PATCH_DIR}"/*.patch; do
+            [ -f "$p" ] || continue
+            log_info "  patch: $(basename "$p")"
+            (cd "${GCC_SRC_ROOT}" && patch -p1 -F3 < "$p")
+        done
+        touch "${PATCH_STAMP}"
+    fi
 fi
-OVERLAY_DIR="${OVERLAYS_DIR}/xtensa_${CHIP}/gcc"
-if [ ! -d "${OVERLAY_DIR}" ]; then
-    log_error "Overlay not found: ${OVERLAY_DIR}"
-    log_error "Available overlays: $(ls "${OVERLAYS_DIR}/")"
-    exit 1
+
+# Statically bake the chip-specific xtensa-config.h into the gcc source.
+# crosstool-NG's traditional approach: each variant ships a toolchain with
+# the overlay compiled in.  We don't use the xtensa-dynconfig plugin —
+# it doesn't extend to the linker's dynamic-relocation path, which xtensa-
+# linux-gnu needs for glibc shared linking.
+OVERLAY_DIR="$(ensure_xtensa_overlay "${CHIP}")"
+if [ -d "${OVERLAY_DIR}/gcc/include" ]; then
+    log_info "Applying ${CHIP} xtensa-config.h overlay to gcc source..."
+    cp -f "${OVERLAY_DIR}/gcc/include/xtensa-config.h" \
+          "${GCC_SRC_ROOT}/include/xtensa-config.h"
 fi
-log_info "Applying xtensa_${CHIP} overlay to GCC (little-endian)..."
-cp "${OVERLAY_DIR}/include/xtensa-config.h" "${GCC_SRC_ROOT}/gcc/config/xtensa/xtensa-config.h"
 
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
@@ -103,16 +115,21 @@ unset CC CXX AR RANLIB STRIP CFLAGS CXXFLAGS LDFLAGS
     --disable-libgomp \
     --disable-libatomic \
     --disable-decimal-float \
+    --enable-plugin \
+    --enable-lto \
+    --enable-target-optspace \
+    --enable-multiarch \
     --with-gnu-as \
     --with-gnu-ld
 
 log_info "Building GCC stage 1..."
+# The overlay is baked into the source; no XTENSA_GNU_CONFIG needed.
 make all-gcc all-target-libgcc -j${JOBS} 2>&1 | tee build.log || {
     log_error "GCC stage 1 build failed — last 80 lines of build.log:"
     tail -80 build.log
     exit 1
 }
-sudo make install-gcc install-target-libgcc
+sudo make install-strip-gcc install-target-libgcc
 
 log_info "GCC stage 1 installed to ${INSTALL_DIR}"
 log_info "Compiler: ${INSTALL_DIR}/bin/${TARGET}-gcc"

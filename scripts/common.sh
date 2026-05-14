@@ -47,3 +47,24 @@ NC='\033[0m'
 log_info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
+
+# Ensure espressif/xtensa-overlays is checked out under $(pwd)/xtensa-overlays
+# and verify the requested chip overlay exists.  Echoes the path to the chip
+# overlay directory (e.g. xtensa-overlays/xtensa_esp32) on stdout; diagnostics
+# go to stderr so callers can use "$(ensure_xtensa_overlay esp32)".
+ensure_xtensa_overlay() {
+    local chip="$1"
+    local overlays_root="$(pwd)/xtensa-overlays"
+    local overlay_dir="${overlays_root}/xtensa_${chip}"
+    if [ ! -d "${overlays_root}" ]; then
+        log_info "Fetching espressif/xtensa-overlays..." >&2
+        git clone --depth=1 https://github.com/espressif/xtensa-overlays.git \
+            "${overlays_root}" >&2
+    fi
+    if [ ! -d "${overlay_dir}" ]; then
+        log_error "Overlay not found: ${overlay_dir}" >&2
+        log_error "Available overlays: $(ls "${overlays_root}/")" >&2
+        return 1
+    fi
+    echo "${overlay_dir}"
+}

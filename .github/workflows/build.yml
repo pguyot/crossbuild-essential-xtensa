@@ -169,6 +169,50 @@ jobs:
           # the binary runs without -L thanks to --interp-prefix built into qemu-xtensa.
           qemu-xtensa -cpu "${CHIP}" -L "${SYSROOT}" /tmp/hello-dyn
 
+      - name: Verify -O2 codegen — gcc_bug_repro
+        # Regression test for the gcc 14.2.0 if-conversion miscompile that
+        # surfaced when the xtensa overlay was statically baked into gcc.
+        # Compiles compute_incr() at -O2 and checks it returns the same
+        # values as the reference implementation across a set of flag patterns.
+        run: |
+          cat > /tmp/gcc_bug_repro.c <<'EOF'
+          #include <stdint.h>
+          #include <stdio.h>
+          #define BEAM_TYPE_HAS_LOWER_BOUND (1 << 12)
+          #define BEAM_TYPE_HAS_UPPER_BOUND (1 << 13)
+          #define BEAM_TYPE_HAS_UNIT        (1 << 14)
+          __attribute__((noinline))
+          int compute_incr(uint16_t b) {
+              int incr = 2;
+              if (b & BEAM_TYPE_HAS_LOWER_BOUND) incr += 8;
+              if (b & BEAM_TYPE_HAS_UPPER_BOUND) incr += 8;
+              if (b & BEAM_TYPE_HAS_UNIT)        incr += 1;
+              return incr;
+          }
+          __attribute__((noinline))
+          int compute_incr_ref(uint16_t b) {
+              return 2
+                  + ((b & BEAM_TYPE_HAS_LOWER_BOUND) ? 8 : 0)
+                  + ((b & BEAM_TYPE_HAS_UPPER_BOUND) ? 8 : 0)
+                  + ((b & BEAM_TYPE_HAS_UNIT)        ? 1 : 0);
+          }
+          int main(void) {
+              uint16_t cases[] = {0x0000, 0x1000, 0x2000, 0x4000, 0x3000, 0x7000};
+              int bad = 0;
+              for (unsigned i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) {
+                  int got = compute_incr(cases[i]);
+                  int ref = compute_incr_ref(cases[i]);
+                  printf("compute_incr(0x%04x) = %-3d ref = %-3d %s\n",
+                         cases[i], got, ref, got == ref ? "OK" : "BUG");
+                  if (got != ref) bad = 1;
+              }
+              return bad;
+          }
+          EOF
+          "${INSTALL_DIR}/bin/${TARGET}-gcc" -O2 -static /tmp/gcc_bug_repro.c -o /tmp/gcc_bug_repro
+          SYSROOT=$("${INSTALL_DIR}/bin/${TARGET}-gcc" -print-sysroot)
+          qemu-xtensa -cpu "${CHIP}" -L "${SYSROOT}" /tmp/gcc_bug_repro
+
       - name: Create toolchain DEB package
         run: |
           PKG_NAME="xtensa-${VARIANT}-linux-gnu-toolchain"

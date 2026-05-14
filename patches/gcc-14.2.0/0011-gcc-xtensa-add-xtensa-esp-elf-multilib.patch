@@ -1,0 +1,60 @@
+From eafbdf36b7497a210b04ce681e85fb3affdcdea3 Mon Sep 17 00:00:00 2001
+From: Alexey Lapshin <alexey.lapshin@espressif.com>
+Date: Thu, 20 Jul 2023 12:51:19 +0400
+Subject: [PATCH] gcc: xtensa: add xtensa*-esp*-elf multilib
+
+gcc/
+        * config.gcc: Add xtensa*-esp*-elf target.
+        * config/xtensa/t-esp-multilib: New file.
+---
+ gcc/config.gcc                   |  6 ++++++
+ gcc/config/xtensa/t-esp-multilib | 20 ++++++++++++++++++++
+ 2 files changed, 26 insertions(+)
+ create mode 100644 gcc/config/xtensa/t-esp-multilib
+
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 95c91ee02..d6f517062 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -3599,6 +3599,12 @@ xstormy16-*-elf)
+ xtensa*-*-elf*)
+ 	tm_file="${tm_file} elfos.h newlib-stdint.h xtensa/elf.h"
+ 	extra_options="${extra_options} xtensa/elf.opt"
++	tmake_file="${tmake_file} xtensa/t-xtensa"
++	case ${target} in
++	xtensa*-esp-elf*)
++		tmake_file="${tmake_file} xtensa/t-esp-multilib"
++		;;
++	esac
+ 	;;
+ xtensa*-*-linux*)
+ 	tm_file="${tm_file} elfos.h gnu-user.h linux.h glibc-stdint.h xtensa/linux.h"
+diff --git a/gcc/config/xtensa/t-esp-multilib b/gcc/config/xtensa/t-esp-multilib
+new file mode 100644
+index 000000000..dfc0ac0e0
+--- /dev/null
++++ b/gcc/config/xtensa/t-esp-multilib
+@@ -0,0 +1,20 @@
++# Copyright (C) 2023 Free Software Foundation, Inc.
++#
++# This file is part of GCC.
++#
++# GCC is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3, or (at your option)
++# any later version.
++#
++# GCC is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with GCC; see the file COPYING3.  If not see
++# <http://www.gnu.org/licenses/>.
++
++MULTILIB_OPTIONS = mdynconfig=xtensa_esp32.so/mdynconfig=xtensa_esp32s2.so/mdynconfig=xtensa_esp32s3.so fno-rtti
++MULTILIB_DIRNAMES = esp32 esp32s2 esp32s3 no-rtti
+-- 
+2.43.0
+
